@@ -29,7 +29,7 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.join(file_path, '../'))
 
 from shadowsocks import shell, daemon, eventloop, tcprelay, udprelay, \
-    asyncdns, manager
+    asyncdns, manager, common
 
 
 def main():
@@ -37,7 +37,15 @@ def main():
 
     config = shell.get_config(False)
 
+    shell.log_shadowsocks_version()
+
     daemon.daemon_exec(config)
+
+    try:
+        import resource
+        logging.info('current process RLIMIT_NOFILE resource: soft %d hard %d'  % resource.getrlimit(resource.RLIMIT_NOFILE))
+    except ImportError:
+        pass
 
     if config['port_password']:
         pass
@@ -78,24 +86,24 @@ def main():
         bindv6 = config.get("out_bindv6", '')
         if type(password_obfs) == list:
             password = password_obfs[0]
-            obfs = password_obfs[1]
+            obfs = common.to_str(password_obfs[1])
             if len(password_obfs) > 2:
-                protocol = password_obfs[2]
+                protocol = common.to_str(password_obfs[2])
         elif type(password_obfs) == dict:
             password = password_obfs.get('password', config_password)
-            method = password_obfs.get('method', method)
-            protocol = password_obfs.get('protocol', protocol)
-            protocol_param = password_obfs.get('protocol_param', protocol_param)
-            obfs = password_obfs.get('obfs', obfs)
-            obfs_param = password_obfs.get('obfs_param', obfs_param)
-            bind = password_obfs.get('bind', bind)
-            bindv6 = password_obfs.get('bindv6', bindv6)
+            method = common.to_str(password_obfs.get('method', method))
+            protocol = common.to_str(password_obfs.get('protocol', protocol))
+            protocol_param = common.to_str(password_obfs.get('protocol_param', protocol_param))
+            obfs = common.to_str(password_obfs.get('obfs', obfs))
+            obfs_param = common.to_str(password_obfs.get('obfs_param', obfs_param))
+            bind = password_obfs.get('out_bind', bind)
+            bindv6 = password_obfs.get('out_bindv6', bindv6)
         else:
             password = password_obfs
         a_config = config.copy()
         ipv6_ok = False
         logging.info("server start with protocol[%s] password [%s] method [%s] obfs [%s] obfs_param [%s]" %
-                (protocol, password, a_config['method'], obfs, obfs_param))
+                (protocol, password, method, obfs, obfs_param))
         if 'server_ipv6' in a_config:
             try:
                 if len(a_config['server_ipv6']) > 2 and a_config['server_ipv6'][0] == "[" and a_config['server_ipv6'][-1] == "]":

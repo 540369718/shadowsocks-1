@@ -40,6 +40,12 @@ class plain(object):
     def init_data(self):
         return b''
 
+    def get_overhead(self, direction): # direction: true for c->s false for s->c
+        return 0
+
+    def get_server_info(self):
+        return self.server_info
+
     def set_server_info(self, server_info):
         self.server_info = server_info
 
@@ -75,11 +81,11 @@ class plain(object):
     def client_udp_post_decrypt(self, buf):
         return buf
 
-    def server_udp_pre_encrypt(self, buf):
+    def server_udp_pre_encrypt(self, buf, uid):
         return buf
 
     def server_udp_post_decrypt(self, buf):
-        return buf
+        return (buf, None)
 
     def dispose(self):
         pass

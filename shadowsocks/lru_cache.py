@@ -29,7 +29,6 @@ if __name__ == '__main__':
 
 try:
     from collections import OrderedDict
-    print("loaded collections.OrderedDict")
 except:
     from shadowsocks.ordereddict import OrderedDict
 
@@ -74,6 +73,9 @@ class LRUCache(collections.MutableMapping):
         del self._store[key]
         del self._keys_to_last_time[key]
 
+    def __contains__(self, key):
+        return key in self._store
+
     def __iter__(self):
         return iter(self._store)
 
@@ -85,11 +87,11 @@ class LRUCache(collections.MutableMapping):
             for key in self._keys_to_last_time:
                 return key
 
-    def sweep(self):
+    def sweep(self, sweep_item_cnt = SWEEP_MAX_ITEMS):
         # O(n - m)
         now = time.time()
         c = 0
-        while c < SWEEP_MAX_ITEMS:
+        while c < sweep_item_cnt:
             if len(self._keys_to_last_time) == 0:
                 break
             for key in self._keys_to_last_time:
@@ -98,10 +100,10 @@ class LRUCache(collections.MutableMapping):
             if now - last_t <= self.timeout:
                 break
             value = self._store[key]
-            if self.close_callback is not None:
-                self.close_callback(value)
             del self._store[key]
             del self._keys_to_last_time[key]
+            if self.close_callback is not None:
+                self.close_callback(value)
             c += 1
         if c:
             logging.debug('%d keys swept' % c)

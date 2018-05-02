@@ -23,7 +23,8 @@ import struct
 import logging
 import binascii
 import re
-import hashlib
+
+from shadowsocks import lru_cache
 
 def compat_ord(s):
     if type(s) == int:
@@ -119,46 +120,13 @@ def is_ip(address):
             pass
     return False
 
-def match_ipv4_address(text):
-    reip = re.compile(r'(?<![\.\d])(?:\d{1,3}\.){3}\d{1,3}(?![\.\d])')
-    for ip in reip.findall(text):
-        return ip
-    return None
 
-def match_ipv6_address(text):
-    reip = re.compile(r'(?<![:.\w])(?:[A-F0-9]{1,4}:){7}[A-F0-9]{1,4}(?![:.\w])')
-    for ip in reip.findall(text):
-        return ip
-    return None
-
-def match_regex(regex,text):
+def match_regex(regex, text):
     regex = re.compile(regex)
     for item in regex.findall(text):
         return True
     return False
 
-def match_host(data):
-    return find_between(to_str(data), "Host: ", "\r\n")
-
-def get_md5(data):
-    m1 = hashlib.md5(data)   
-    return m1.hexdigest()   
-
-def find_between( s, first, last ):
-    try:
-        start = s.index( first ) + len( first )
-        end = s.index( last, start )
-        return s[start:end]
-    except ValueError:
-        return ""
-
-def find_between_r( s, first, last ):
-    try:
-        start = s.rindex( first ) + len( first )
-        end = s.rindex( last, start )
-        return s[start:end]
-    except ValueError:
-        return ""
 
 def patch_socket():
     if not hasattr(socket, 'inet_pton'):
@@ -270,7 +238,7 @@ def parse_header(data):
                      'encryption method' % addrtype)
     if dest_addr is None:
         return None
-    return connecttype, to_bytes(dest_addr), dest_port, header_length
+    return connecttype, addrtype, to_bytes(dest_addr), dest_port, header_length
 
 
 class IPNetwork(object):
@@ -331,6 +299,12 @@ class IPNetwork(object):
     def __cmp__(self, other):
         return cmp(self.addrs_str, other.addrs_str)
 
+    def __eq__(self, other):
+        return self.addrs_str == other.addrs_str
+
+    def __ne__(self, other):
+        return self.addrs_str != other.addrs_str
+
 class PortRange(object):
     def __init__(self, range_str):
         self.range_str = to_str(range_str)
@@ -361,6 +335,40 @@ class PortRange(object):
 
     def __cmp__(self, other):
         return cmp(self.range_str, other.range_str)
+
+    def __eq__(self, other):
+        return self.range_str == other.range_str
+
+    def __ne__(self, other):
+        return self.range_str != other.range_str
+
+class UDPAsyncDNSHandler(object):
+    dns_cache = lru_cache.LRUCache(timeout=1800)
+    def __init__(self, params):
+        self.params = params
+        self.remote_addr = None
+        self.call_back = None
+
+    def resolve(self, dns_resolver, remote_addr, call_back):
+        if remote_addr in UDPAsyncDNSHandler.dns_cache:
+            if call_back:
+                call_back("", remote_addr, UDPAsyncDNSHandler.dns_cache[remote_addr], self.params)
+        else:
+            self.call_back = call_back
+            self.remote_addr = remote_addr
+            dns_resolver.resolve(remote_addr[0], self._handle_dns_resolved)
+            UDPAsyncDNSHandler.dns_cache.sweep()
+
+    def _handle_dns_resolved(self, result, error):
+        if error:
+            logging.error("%s when resolve DNS" % (error,)) #drop
+            return self.call_back(error, self.remote_addr, None, self.params)
+        if result:
+            ip = result[1]
+            if ip:
+                return self.call_back("", self.remote_addr, ip, self.params)
+        logging.warning("can't resolve %s" % (self.remote_addr,))
+        return self.call_back("fail to resolve", self.remote_addr, None, self.params)
 
 def test_inet_conv():
     ipv4 = b'8.8.4.4'

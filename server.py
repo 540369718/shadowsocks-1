@@ -26,15 +26,13 @@ if __name__ == '__main__':
 
 import server_pool
 import db_transfer
-import speedtest_thread
-import auto_thread
-import auto_block
 from shadowsocks import shell
 from configloader import load_config, get_config
 
 class MainThread(threading.Thread):
 	def __init__(self, obj):
-		threading.Thread.__init__(self)
+		super(MainThread, self).__init__()
+		self.daemon = True
 		self.obj = obj
 
 	def run(self):
@@ -49,27 +47,19 @@ def main():
 		db_transfer.DbTransfer.thread_db()
 	else:
 		if get_config().API_INTERFACE == 'mudbjson':
-			threadMain = MainThread(db_transfer.MuJsonTransfer)
+			thread = MainThread(db_transfer.MuJsonTransfer)
+		elif get_config().API_INTERFACE == 'sspanelv2':
+			thread = MainThread(db_transfer.DbTransfer)
 		else:
-			threadMain = MainThread(db_transfer.DbTransfer)
-		threadMain.start()
-		
-		threadSpeedtest = threading.Thread(group = None, target = speedtest_thread.speedtest_thread, name = "speedtest", args = (), kwargs = {}) 
-		threadSpeedtest.start()
-		
-		threadAutoexec = threading.Thread(group = None, target = auto_thread.auto_thread, name = "autoexec", args = (), kwargs = {})  
-		threadAutoexec.start()
-		
-		threadAutoblock = threading.Thread(group = None, target = auto_block.auto_block_thread, name = "autoblock", args = (), kwargs = {})  
-		threadAutoblock.start()
-		
+			thread = MainThread(db_transfer.Dbv3Transfer)
+		thread.start()
 		try:
-			while threadMain.is_alive():
-				time.sleep(10)
+			while thread.is_alive():
+				thread.join(10.0)
 		except (KeyboardInterrupt, IOError, OSError) as e:
 			import traceback
 			traceback.print_exc()
-			threadMain.stop()
+			thread.stop()
 
 if __name__ == '__main__':
 	main()
